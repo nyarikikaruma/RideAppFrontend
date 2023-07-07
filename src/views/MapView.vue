@@ -5,17 +5,19 @@
             <div class="overflow-hidden shadow sm:rounded-md max-w-sm mx-auto text-left">
                 <div class="bg-white px-4 py-5 sm:p-6">
                     <div>
-                        <GMapMap :zoom="11" :center="location.destination.geometry" 
-                        style="height: 256px; width: 100%;">
-                        <GMapMarker :position="location.destination.geometry"></GMapMarker>
-                    </GMapMap>
+                        <GMapMap :zoom="11" :center="location.destination.geometry" ref="gMap"
+                            style="height: 256px; width: 100%;">
+                            <GMapMarker :position="location.destination.geometry"></GMapMarker>
+                        </GMapMap>
                     </div>
                     <div class="mt-2">
-                        <p class="text-xl">Going to <srong>{{location.destination.name}}</srong></p>
+                        <p class="text-xl">Going to <strong>{{ location.destination.name }}</strong>
+                        </p>
                     </div>
                 </div>
                 <div class="bg-gray-50 px-4 py-3 text-right sm:px-6">
-                    <button @click="checkValues" class="inline-flex justify-center rounded-md border border-transparent bg-black py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-gray-600 focus:outline-none">
+                    <button @click="handleTripConfirm"
+                        class="inline-flex justify-center rounded-md border border-transparent bg-black py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-gray-600 focus:outline-none">
                         Let's Go!
                     </button>
                 </div>
@@ -26,13 +28,31 @@
 <script setup>
 import { useLocationStore } from '../stores/location';
 import { useRouter } from 'vue-router';
-import { onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
+import http from '@/helpers/http'
 
 const location = useLocationStore()
 const router = useRouter()
 
+const gMap = ref(null)
 
-onMounted(() => {
+const handleTripConfirm = () => {
+    http().post('/api/trip', {
+        origin: location.current.geometry,
+        destination: location.destination.geometry,
+        destination_name: location.destination.name
+    })
+        .then((response) => {
+            router.push({
+                name: 'trip'
+            })
+        })
+        .catch((error) => {
+            console.error(error)
+        })
+}
+
+onMounted(async () => {
     if (location.destination.name == '') {
         router.push({
             name: 'location'
@@ -40,16 +60,34 @@ onMounted(() => {
     }
 
     // get current users location
-    navigator.geolocation.getCurrentPosition((success) => {
-        console.log('Your current location is:', success);
-    }, (error) => {
-        console.error(error);
+    await location.updateCurrentUserLocation()
+
+    gMap.value.$mapPromise.then((mapObject) => {
+
+        let currentPoint = new google.maps.LatLng(location.current.geometry),
+            destinationPoint = new google.maps.LatLng(location.destination.geometry),
+            directionsService = new google.maps.DirectionsService,
+            directionsDisplay = new google.maps.DirectionsRenderer({
+                map: mapObject
+            })
+
+        directionsService.route({
+            origin: currentPoint,
+            destination: destinationPoint,
+            avoidTolls: false,
+            avoidHighways: false,
+            travelMode: google.maps.TravelMode.DRIVING
+        }, (res, status) => {
+            if (status === google.maps.DirectionsStatus.OK) {
+                directionsDisplay.setDirections(res)
+            } else {
+                console.error(status)
+            }
+        })
     })
 })
 const checkValues = () => {
-    console.log('This is the geometry:',location.destination.geometry);
+    console.log('This is the geometry:', location.destination.geometry);
 }
 </script>
-<style>
-    
-</style>
+<style></style>
